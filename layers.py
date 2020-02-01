@@ -122,6 +122,7 @@ class MaxPool2d:
         out_height = (height - self.kernel_size) // self.stride + 1
         out_width = (width - self.kernel_size) // self.stride + 1
         result = np.zeros((batch_size, out_height, out_width, channels))
+
         for j in range(out_height):
             for i in range(out_width):
                 result[:, j, i, :] = np.amax(x[:, j:j + self.kernel_size, i:i + self.kernel_size, :], (1, 2))
@@ -134,8 +135,8 @@ class MaxPool2d:
         for j in range(out_height):
             for i in range(out_width):
                 x_slice = self.x[:, j:j + self.kernel_size, i:i + self.kernel_size, :]
+		mask = (x_slice == np.amax(x_slice, (1, 2))[:, np.newaxis, np.newaxis, :])
                 grad_ij = grad[:, j, i, :][:, np.newaxis, np.newaxis, :]
-                mask = (x_slice == np.amax(x_slice, (1, 2))[:, np.newaxis, np.newaxis, :])
                 x_grad[:, j:j + self.kernel_size, i:i + self.kernel_size, :] += grad_ij * mask
         return x_grad
 
