@@ -58,6 +58,27 @@ class Flattener:
         return []
 
 
+class Dropout:
+    def __init__(self, p=0.5, train=True):
+        self.p = p
+        self.train = train
+        self.mask = None
+
+    def forward(self, x):
+        if self.train:
+            self.mask = np.random.binomial(1, self.p, size=x.shape) / self.p
+            return x * self.mask
+        return x
+
+    def backward(self, grad):
+        if self.train:
+            return grad * self.mask
+        return grad
+
+    def parameters(self):
+        return []
+
+
 class Conv2d:
     def __init__(self, in_channels, out_channels, kernel_size, padding=0):
         self.in_channels = in_channels
@@ -65,7 +86,7 @@ class Conv2d:
         self.kernel_size = kernel_size
         self.padding = padding
 
-        self.w = Parameter(np.random.randn(kernel_size, kernel_size, in_channels, out_channels))
+        self.w = Parameter(0.001 * np.random.randn(kernel_size, kernel_size, in_channels, out_channels))
         self.b = Parameter(np.zeros(out_channels))
 
         self.x_padded = None

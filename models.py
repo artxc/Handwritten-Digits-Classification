@@ -36,3 +36,13 @@ class Classifier:
 
     def __call__(self, x):
         return softmax(self.forward(x))
+    
+    def train(self):
+        for layer in self.layers:
+            if hasattr(layer, 'train'):
+                layer.train = True
+
+    def eval(self):
+        for layer in self.layers:
+            if hasattr(layer, 'train'):
+                layer.train = False
