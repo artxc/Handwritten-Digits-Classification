@@ -24,9 +24,8 @@ class ReLU:
 
 class Linear:
     def __init__(self, in_features, out_features):
-        self.w = Parameter(np.random.normal(loc=0.0,
-                                            scale=np.sqrt(2 / (in_features + out_features)),
-                                            size=(in_features, out_features)))
+        w_shape = (in_features, out_features)
+        self.w = Parameter(np.random.normal(loc=0.0, scale=np.sqrt(2 / sum(w_shape)), size=w_shape))
         self.b = Parameter(np.zeros(out_features))
         self.x = None
 
@@ -59,14 +58,16 @@ class Flattener:
 
 
 class Dropout:
-    def __init__(self, p=0.5, train=True):
+    def __init__(self, p=0.5, train=True, grad_check=False):
         self.p = p
         self.train = train
+        self.grad_check = grad_check
         self.mask = None
 
     def forward(self, x):
         if self.train:
-            self.mask = np.random.binomial(1, self.p, size=x.shape) / self.p
+            if self.mask is None or not self.grad_check:
+                self.mask = np.random.binomial(1, self.p, size=x.shape) / self.p
             return x * self.mask
         return x
 
@@ -86,7 +87,8 @@ class Conv2d:
         self.kernel_size = kernel_size
         self.padding = padding
 
-        self.w = Parameter(0.001 * np.random.randn(kernel_size, kernel_size, in_channels, out_channels))
+        w_shape = (kernel_size * kernel_size * in_channels, out_channels)
+        self.w = Parameter(np.random.normal(loc=0.0, scale=np.sqrt(2 / sum(w_shape)), size=w_shape))
         self.b = Parameter(np.zeros(out_channels))
 
         self.x_padded = None
@@ -98,8 +100,6 @@ class Conv2d:
         self.x_padded = np.pad(array=x, mode='constant',
                                pad_width=((0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)))
 
-        w_reshaped = self.w.value.reshape(-1, self.out_channels)
-
         out_height = self.x_height + 2 * self.padding - self.kernel_size + 1
         out_width = self.x_width + 2 * self.padding - self.kernel_size + 1
         result = np.zeros((batch_size, out_height, out_width, self.out_channels))
@@ -107,22 +107,22 @@ class Conv2d:
         for j in range(out_height):
             for i in range(out_width):
                 x_reshaped = self.x_padded[:, j:j + self.kernel_size, i:i + self.kernel_size, :].reshape(batch_size, -1)
-                result[:, j, i, :] = np.dot(x_reshaped, w_reshaped) + self.b.value
+                result[:, j, i, :] = np.dot(x_reshaped, self.w.value) + self.b.value
         return result
 
     def backward(self, grad):
         batch_size, out_height, out_width, out_channels = grad.shape
 
         x_grad = np.zeros_like(self.x_padded)
-        w_reshaped = self.w.value.reshape(-1, self.out_channels)
 
-        self.b.grad += np.sum(grad, axis=(0, 1, 2))
         for j in range(out_height):
             for i in range(out_width):
+                grad_ij = grad[:, j, i, :]
                 x_reshaped = self.x_padded[:, j:j + self.kernel_size, i:i + self.kernel_size, :].reshape(batch_size, -1)
-                self.w.grad += np.dot(x_reshaped.T, grad[:, j, i, :]).reshape(self.w.value.shape)
-                x_ij_grad = np.dot(grad[:, j, i, :], w_reshaped.T).reshape(batch_size, self.kernel_size,
-                                                                           self.kernel_size, self.in_channels)
+                self.w.grad += np.dot(x_reshaped.T, grad_ij)
+                self.b.grad += grad_ij.sum(axis=0)
+                x_ij_grad = np.dot(grad_ij, self.w.value.T)
+                x_ij_grad = x_ij_grad.reshape(batch_size, self.kernel_size, self.kernel_size, self.in_channels)
                 x_grad[:, j:j + self.kernel_size, i:i + self.kernel_size, :] += x_ij_grad
         return x_grad[:, self.padding:self.padding + self.x_height, self.padding:self.padding + self.x_width, :]
 
@@ -153,11 +153,12 @@ class MaxPool2d:
         _, out_height, out_width, _ = grad.shape
 
         x_grad = np.zeros_like(self.x)
+
         for j in range(out_height):
             for i in range(out_width):
+                grad_ij = grad[:, j, i, :][:, np.newaxis, np.newaxis, :]
                 x_slice = self.x[:, j:j + self.kernel_size, i:i + self.kernel_size, :]
                 mask = (x_slice == np.amax(x_slice, (1, 2))[:, np.newaxis, np.newaxis, :])
-                grad_ij = grad[:, j, i, :][:, np.newaxis, np.newaxis, :]
                 x_grad[:, j:j + self.kernel_size, i:i + self.kernel_size, :] += grad_ij * mask
         return x_grad
 
