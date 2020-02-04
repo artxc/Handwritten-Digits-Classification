@@ -37,7 +37,9 @@ def check_model_gradient(model, X, y, loss_and_gradient, delta=1e-5, tol=1e-4):
             model.backward(grad)
             return loss, parameter.grad
 
-        check_gradient(helper_func, initial_w, delta, tol)
+        if not check_gradient(helper_func, initial_w, delta, tol):
+            return False
+    return True
 
 
 def check_layer_parameter_gradient(layer, x, parameter_id, delta=1e-5, tol=1e-4):

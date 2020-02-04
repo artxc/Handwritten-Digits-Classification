@@ -152,23 +152,20 @@ class MaxPool2d:
         return result
 
     def backward(self, grad):
-        batch_size, out_height, out_width, out_channels = grad.shape
+        _, out_height, out_width, _ = grad.shape
 
         x_grad = np.zeros_like(self.x)
 
-        for sample in range(batch_size):
-            for channel in range(out_channels):
-                for j in range(out_height):
-                    for i in range(out_width):
-                        grad_ij = grad[sample, j, i, channel]
-                        x_slice = self.x[sample, j * self.stride:j * self.stride + self.kernel_size,
-                                         i * self.stride:i * self.stride + self.kernel_size, channel]
-                        mask = (x_slice == np.max(x_slice))
-                        n_max = np.sum(mask)
-                        if n_max > 1:
-                            grad_ij /= 2
-                        x_grad[sample, j * self.stride:j * self.stride + self.kernel_size,
-                               i * self.stride:i * self.stride + self.kernel_size, channel] += grad_ij * mask
+        for j in range(out_height):
+            for i in range(out_width):
+                grad_ij = grad[:, j, i, :][:, np.newaxis, np.newaxis, :]
+                x_slice = self.x[:, j * self.stride:j * self.stride + self.kernel_size,
+                                 i * self.stride:i * self.stride + self.kernel_size, :]
+                mask = (x_slice == np.amax(x_slice, (1, 2))[:, np.newaxis, np.newaxis, :]).astype(float)
+                multiple_max_indices = np.where(mask.sum(axis=(1, 2)) > 1)
+                mask[multiple_max_indices[0], :, :, multiple_max_indices[1]] /= 2
+                x_grad[:, j * self.stride:j * self.stride + self.kernel_size,
+                       i * self.stride:i * self.stride + self.kernel_size, :] += grad_ij * mask
         return x_grad
 
     def parameters(self):
